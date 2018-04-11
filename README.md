@@ -1,5 +1,5 @@
 # recommendations
-The following repository was created for a class on Recommendation Engines with three different notebooks:
+The following repository was created for a class on Recommendation Engines. Over the course of the term, three different recommendation/filtering engines were created (code, HTML file, and datasets are provided for each one):
 
 (1) Annie_Pi_exerciseCF: Notebook created in R using MovieLens datasets to develop a collaborative filtering engine based on user similarity using Pearson Correlation and weighted averages.
 
