@@ -1,0 +1,389 @@
+# IE - Master in Business Analytics and Big Data
+Recommendation Systems
+
+Building a Non Personalized Recommendation Engine
+
+Author: Annie Pi / Last Updated: Feb. 13, 2018
+
+========================================================
+
+# Initialization
+
+Import libraries
+```{r message = FALSE}
+library(dplyr) #for chained manipulations and calculations
+library(ggplot2) #for data visualization
+library(stringr) #for string manipulations
+```
+
+Load the critics dataset and explore structure.
+```{r}
+critics <- read.csv("critics.csv")
+str(critics)
+```
+
+Before beginning analysis, I want to fix the column/movie names to replace periods. 
+```{r}
+#loop through column names, replacing "..." with " - " and "." with " "
+for(i in 2:ncol(critics)) {
+  colnames(critics)[i] = gsub("\\.", " ", gsub("\\.\\.\\.", " - ", colnames(critics)[i],))
+}
+
+#display updated column names
+colnames(critics)
+```
+
+
+# 1) Top 5 Movies, by rating mean
+Calculate mean rating for each movie, ordered with the highest rating listed first, and plot the top 5.
+
+**Expected result**:
+3.600000, 'The Shawshank Redemption'
+3.266667, 'Star Wars IV - A New Hope'
+3.222222, 'Blade Runner'
+3.166667, 'Groundhog Day'
+3.062500, 'The Silence of the Lambs'
+
+```{r fig.width=7, fig.height=6}
+#create a data frame of calculated column means for each Movie column (excluding the first one, which is User)
+avgRatings = data.frame(colMeans(critics[,-1], na.rm=T))
+
+#set column names for the data frame
+avgRatings = setNames(cbind(rownames(avgRatings), avgRatings, row.names = NULL), 
+         c("MovieName", "AvgRating"))
+
+#arrange ratings in descending order
+avgRatings = avgRatings %>% 
+  arrange(desc(AvgRating))
+
+#display top 5 average ratings
+avgRatings %>%
+  head(5) %>%
+  select(AvgRating, MovieName)
+
+#create a bar graph of top 5 movies by rating and re-arrange bars to show in descending order
+avgRatings %>%
+  head(5) %>%
+  ggplot(aes(x=factor(MovieName, levels=avgRatings$MovieName[order(desc(avgRatings$AvgRating))]), y=AvgRating)) +
+  geom_bar(stat="identity") +
+  theme(axis.text.x = element_text(size=14), text = element_text(size=16)) +
+  labs(x="Movie Name", y="Total Reviews", title="Top 5 Movies by Rating Mean")
+```
+
+# 2) Top 5 Movies, by rating distribution
+Calculate the percentage of ratings for each movie that are 4 stars or higher. Order with the highest percentage first, and plot the top 5 movies with more high ratings distribution.
+
+**Expected result**:
+0.7000000, 'The Shawshank Redemption'
+0.5333333, 'Star Wars IV - A New Hope'
+0.5000000, 'Gladiator'
+0.4444444, 'Blade Runner'
+0.4375000, 'The Silence of the Lambs'
+
+```{r fig.width=7, fig.height=6}
+#create an empty data frame to store ratings
+highRatings <- data.frame()
+
+#loop through all rows for all columns to calculate a running sum of number of ratings greater than 4
+for(i in 2:ncol(critics)) {
+  sum.x <- 0
+  for(j in 1:nrow(critics)) {
+    if(is.na(critics[j,i]) == FALSE && critics[j,i] >= 4) {
+      sum.x <- sum.x + 1
+    }
+  }
+  highRatings <- rbind(highRatings, sum.x/sum(!is.na(critics[i]))) #for each film, calculate number of ratings greater than 4 divided by total number of ratings and add this to the data frame 
+}
+
+#set column names for the data frame
+highRatings2 = setNames(cbind(colnames(critics[2:21]), highRatings, row.names = NULL), 
+  c("MovieName", "HighRatingPct"))
+
+#arrange in descending order
+highRatings2 = highRatings2 %>%
+  arrange(desc(HighRatingPct)) %>%
+  select(HighRatingPct, MovieName)
+
+#display ratings
+highRatings2 %>%
+  head(5)
+
+#create a bar graph of top 5 movies by percentage of high ratings
+highRatings2 %>%
+  head(5) %>%
+  ggplot(aes(x=factor(MovieName, levels=highRatings2$MovieName[order(desc(highRatings2$HighRatingPct))]), y=HighRatingPct)) +
+  geom_bar(stat="identity") +
+  theme(axis.text.x = element_text(size=14), text = element_text(size=16)) +
+  labs(x="Movie Name", y="% of Ratings 4 Stars or Higher", title="Top 5 Movies by Percentage of 4+ Ratings")
+
+```
+
+# 3) Top 5 Movies, by quantity of ratings
+Count the number of ratings for each movie, order the one with most number of ratings first, submit the top 5.
+
+**Expected result**:
+17, 'Toy Story'
+16, 'The Silence of the Lambs'
+15, 'Star Wars IV - A New Hope'
+14, 'Star Wars VI - Return of the Jedi'
+13, 'Independence Day'
+
+```{r fig.width=7, fig.height=6}
+#create an empty data frame
+numRatings <- data.frame()
+
+#loop through each column (movie) and add a count of ratings for each mavie to the dataframe
+for(i in 2:ncol(critics)) {
+  numRatings <- rbind(numRatings, sum(!is.na(critics[i])))
+}
+
+#set column names for the data frame
+numRatings2 = setNames(cbind(colnames(critics[2:21]), numRatings, row.names = NULL), 
+  c("MovieName", "NumRatings"))
+
+#sort by number of ratings and show movie names for top 5
+numRatings2 %>%
+  arrange(desc(NumRatings)) %>%
+  select(MovieName) %>%
+  head(5)
+```
+
+# 4) People who watched Star Wars IV also watched ...
+Calculate movies that most often occur with other movie. For each movie, calculate the percentage of the other movie raters who also rated that movie. Order with the highest percentage first, and submit the top 5. Select "Star.Wars.IV...A.New.Hope" movie by defaut. Use the (x+y)/x method.
+
+Top Occurences:
+0.9333333, 'Toy Story'
+0.8666667, 'Star Wars: Episode VI - Return of the Jedi'
+0.8000000, 'The Silence of the Lambs'
+0.7333333, 'Independence Day'
+0.6666667, 'Total Recall'
+
+```{r fig.width=7, fig.height=6}
+#store total num of ratings for Star Wars IV - A New Hope
+count = sum(!is.na(critics$`Star Wars IV - A New Hope`))
+
+#filter on existing ratings for Star Wars IV and calculate how many ratings there are for each other film
+starwars = critics %>% 
+  filter(!is.na(`Star Wars IV - A New Hope`)) %>% 
+  summarize_all(funs((sum(!is.na(.)))/count)) %>%
+  select(., -User) %>% #remove User column from results 
+  t(.) #transpose results
+
+#transform results into a dataframe
+starwars2 = data.frame(starwars)
+
+#set column names for the dataframe      
+starwars2 = setNames(cbind(rownames(starwars2), starwars2, row.names = NULL), 
+  c("MovieName", "Occurrences"))
+
+#arrange by descending, remove Star Wars IV - A New Hope, and select top 5 results
+starwars2 %>% 
+  arrange(desc(Occurrences)) %>% 
+  filter(MovieName != "Star Wars IV - A New Hope") %>%
+  head(5) %>%
+  select(Occurrences, MovieName)
+```
+
+# 5) People who liked Babe also liked ...
+Calculate the movies better rated of people who liked a movie. Select the people who liked the movie "Babe" (4 or 5 stars) and provide the top 5 movies they liked most.
+
+**Expected result**:
+5.000, 'Pulp.Fiction'
+5.000, 'Groundhog.Day'
+4.500, 'The.Shawshank.Redemption'
+4.333, 'Toy.Story'
+4.000, 'Blade.Runner'
+
+```{r fig.width=7, fig.height=6}
+#of the users that rated Babe 4 or higher, calculate the mean ratings for other movies 
+babe = critics %>% 
+  filter(Babe >= 4) %>%
+  summarize_all(funs(mean(., na.rm = T))) %>%
+  select(., -User) %>%
+  t(.) 
+
+#transform results into a dataframe
+babe2 = data.frame(babe)
+
+#set column names for the dataframe
+babe2 = setNames(cbind(rownames(babe2), babe2, row.names = NULL), 
+  c("MovieName", "AvgRating"))
+
+#arrange by descending, remove Babe, and select top 5
+babe2 %>% 
+  arrange(desc(AvgRating)) %>% 
+  filter(MovieName != "Babe") %>%
+  head(5) %>%
+  select(AvgRating, MovieName)
+```
+
+# 6) MovieLens
+Explore a real data set and provide non-personalized ratings. You can use the MovieLens database. You can find MovieLens' dataset here: http://files.grouplens.org/datasets/movielens/ml-10m-README.html
+
+I load two datasets from MovieLens, Movies and Ratings, and create a merged dataset based on movieId so that I can access these in the same data frame. 
+```{r}
+movies <- read.csv("movies.csv")
+ratings <- read.csv("ratings.csv")
+
+movielens = merge(movies, ratings, by="movieId")
+```
+
+Looking at the structure of my merged dataset, I see that there are 6 variables with 100,004 observations (ratings) and 9123 titles (movies). I notice immediately that there are several issues with the data:
+
+- The title field contains both the name of the movie and the release year
+- There are over 900 different genres
+- The timestamp is in Unix format 
+```{r}
+str(movielens)
+```
+
+It seems that the release year always comes in parentheses at the end, so I use the stringr library to extract the last six characters of the title field and insert that into a new column called releaseyear. 
+```{r}
+#put last six characters into a new field called releaseyear
+movielens = movielens %>%
+  mutate(releaseyear = as.integer(gsub("\\)","",gsub("\\(", "", str_sub(title, start = -6)))))
+
+movielens %>%
+  dplyr::select(title,releaseyear) %>%
+  head(10)
+```
+
+To check that releaseyear was created correctly, I do a summary of this new column and I see that there are a few issues: the minimum is -1979 and there are 4 NAs value. 
+```{r}
+summary(movielens$releaseyear)
+```
+
+I inspect these values in the dataframe. 
+```{r}
+movielens[movielens$releaseyear==-1979,]
+movielens[is.na(movielens$releaseyear),]
+```
+
+First, I see that "-1979" was parsed from "Falty Towers (1975-1979)." It seems strange that a movie would have lasted four years, and looking up this title online, I see it is actually a TV show. For the N/A values I see again there is a TV show "Big Bang Theory, The (2007-)" as well as three titles with no year at the end. I remove these rows to clean up the data.
+```{r}
+#remove values
+movielens = movielens[!movielens$releaseyear==-1979,]
+movielens = movielens[!is.na(movielens$releaseyear),]
+```
+
+Now there are no NA values and the years range from 1902 to 2016 and I can use this to analyze most popular movies by different years.
+```{r}
+summary(movielens$releaseyear)
+```
+
+To correct the timestamp, I use the anytime library to convert from UNIX into a datetime. Now I can parse out year if I wanted to filter only on recent reviews, for example.
+```{r}
+library(anytime)
+movielens$timestamp = anytime(movielens$timestamp)
+
+movielens %>%
+  dplyr::select(timestamp) %>%
+  head(5)
+```
+
+Looking at genre, I see that there are a wide combination of genres, ranging from single values "Comedy" and "Action" to concatenated genres "Adventure|Children|Fantasy." I could split these values and perhaps pick a primary genre and then subgenres, but because this is only for a non-personalized recommendation engine, and I will make recommendations based on factors such as quantity of ratings and average rating, rather than genre, I leave the field as it is. 
+```{r}
+movielens %>%
+  select(genres) %>%
+  distinct() %>%
+  head(10)
+```
+
+Next, I check for missing values across all columns, and see that there are no missing values. 
+```{r}
+which(colSums(is.na(movielens)) > 0)
+```
+
+Now, looking at a summary of the data, I can see that:
+- Ratings range from 0.5 to 5, with a mean rating of 3.544 and a median rating of 4. 
+- Ratings were collected from 1995 to 2016.
+- The most popular movies have over 300 ratings each. 
+- Dramas are the most popular genre in the datset, followed by comedies. 
+```{r}
+summary(movielens)
+```
+
+To examine rating more closely, I plot a histogram to see the distribution of values. I notice that:
+- The distribution of ratings skews towards the right (higher end)
+- Whole ratings (such as 3 or 4) are much more common than half ratings (3.5 and 4.5)
+- Almost 4x as many people gave movie ratings of 5 vs. a rating of 1
+
+I conclude that overall, the movies in this dataset are pretty popular!
+```{r}
+ggplot(movielens, aes(x = rating)) + 
+  geom_histogram(bins = 10, color=I("gray")) +
+  labs(x="Rating", y="Count", title="Distribution of Ratings in MovieLens Dataset")
+```
+
+To make a non-personalized recommendation using this dataset, I start by trying to select the top 10 movies, based on the average rating. 
+```{r}
+movielens %>%
+  group_by(title) %>%
+  summarize(avgRating = mean(rating)) %>%
+  arrange(desc(avgRating)) %>%
+  head(10)
+```
+
+The top 10 movies all have a average rating of 5. It seems unlikely that everyone that watched the movie gave it a perfect score, unless only 1 or 2 people rated the movie. So I re-run the same analysis, but this time showing the number of reviews for each movie.
+```{r}
+movielens %>%
+  group_by(title) %>%
+  summarize(avgRating = mean(rating), numRatings = n()) %>%
+  arrange(desc(avgRating)) %>%
+  head(10)
+```
+
+As expected, the top movies are those with only 1 or 3 ratings. I don't want to bias the results towards movies that have few ratings, so I filter for movies that only have a number of ratings greater than or equal to the mean.
+```{r}
+topRatings = movielens %>%
+  group_by(title) %>%
+  summarize(avgRating = mean(rating), numRatings = n()) %>%
+  arrange(desc(avgRating))
+
+topRatings %>%
+  filter(numRatings >= mean(topRatings$numRatings)) %>%
+  head(10)
+```
+
+The previous table still seems to recommend lesser-known movies from many years ago, such as "Inherit the Wind" and "Tom Jones," so I adjust the recommendations to first select the top 10 most rated movies, and then sort by rating. This gives me the most popular films by quantity and rating. 
+```{r}
+topRatings %>%
+  arrange(desc(numRatings)) %>%
+  head(10) %>%
+  arrange(desc(avgRating))
+```
+
+But all of the recommended movies are from the 90s, and users are still using MovieLens in 2016, so perhaps I want to recommend only movies that were released in 2015 or later, so that they are more relevant for these new users. Using the same methodology as before, I now get The Martian and Inside Out on top. 
+```{r}
+movielens %>%
+  filter(releaseyear >= 2015) %>%
+  group_by(title) %>%
+  summarize(avgRating = mean(rating), numRatings = n()) %>%
+  arrange(desc(numRatings)) %>%
+  head(10) %>%
+  arrange(desc(avgRating))
+```
+
+Now that I know "The Martian (2015)" is the top rated movie from the last two years, I might want to see what users that liked "The Martian (2015)" also liked so I can recommend more of a mix of movies. 
+```{r}
+#create a dataframe of users that rated "The Martian (2015)" above or equal to a 4
+users = movielens %>%
+  filter(title == "The Martian (2015)" & rating >=4) %>%
+  select(userId)
+
+#create a dataframe filtering on users from previous dataframe, group by movie title, and calculate mean rating and num of ratings
+movies2 = movielens %>%
+  filter(userId %in% users$userId) %>%
+  group_by(title) %>%
+  summarize(avgRating = mean(rating, na.rm=T), numRatings = n()) %>%
+  select(title, avgRating, numRatings)
+
+#filter previous dataframe only on movies that are above the mean number of ratings and then sort by mean rating and selecting top 5
+movies2 %>%
+  filter(numRatings > mean(numRatings)) %>%
+  arrange(desc(avgRating)) %>%
+  head(5)
+```
+
+Here, we see an interesting mix of results of movies for people that liked the Martian, ranging from 1942 to 2001. Though there are many more ways to do non-personalized recommendations using the MovieLens dataset, I now have three different sets of non-personzlied recommendations, which can be provided depending on what fits the context best. 
+

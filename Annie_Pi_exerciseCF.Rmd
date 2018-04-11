@@ -1,0 +1,175 @@
+# IE - Master in Business Analytics and Big Data
+Recommendation Systems
+
+Building a Collaborative Filtering Engine
+
+Author: Annie Pi / Last Updated: Feb. 13, 2018
+
+========================================================
+
+# Initialization
+
+Import libraries
+
+```{r message = FALSE}
+library(dplyr) #for chained manipulations and calculations
+library(ggplot2) #for data visualization
+library(gridExtra) #for arranging graphs in a grid
+```
+
+Load the critics dataset.
+```{r}
+critics <- read.csv("critics.csv")
+```
+
+# 1) Pearson correlation coefficient 
+Calculate the Pearson correlation coefficient between Victoria and Nuria
+
+**Expected correlation between Victoria and Nuria**: 0.3651484
+
+```{r fig.width=7, fig.height=6}
+#transpose critics and set reviewer names as column titles
+critics_T = setNames(data.frame(t(critics[,-1])), critics[,1])
+
+#calculate pearson correlation between Nuria and Victoria using transposed dataframe
+cor(critics_T$Nuria, critics_T$Victoria, use='complete.obs')
+```
+
+# 2) Compare two movie critics
+Using the calculated Pearson correlation in the previous section. Compare and show the movie ratings for Victoria and Nuria on a scatter plot. How is this compared with the same ratings of Maria and Nerea on a scatter plot? What about Chris and Jim? What it means?
+```{r message = FALSE, warning = FALSE}
+#create scatter plot comparing Victoria and Nuria
+chart1 = critics_T %>%
+  ggplot(aes(x=Nuria, y=Victoria)) +
+  geom_point() +
+  geom_smooth(method="lm", se=F) +
+  labs(x="Nuria Ratings", y="Victoria Ratings", title="Victoria vs. Nuria")
+
+#create scatter plot comparing Maria and Nerea
+chart2 = critics_T %>%
+  ggplot(aes(x=Maria, y=Nerea)) +
+  geom_point() +
+    geom_smooth(method="lm", se=F) +
+  labs(x="Maria Ratings", y="Nerea Ratings", title="Maria vs. Nerea")
+
+#create scatter plot comparing Chris and Jim
+chart3 = critics_T %>%
+  ggplot(aes(x=Chris, y=Jim)) +
+  geom_point() +
+  geom_smooth(method="lm", se=F) +
+  labs(x="Chris Ratings", y="Jim Ratings", title="Chris vs. Jim")
+
+#show three scatter plots
+grid.arrange(chart1, chart2, chart3, nrow=3)
+```
+
+There appears to be a slight positive correlation between Nuria and Victoria's ratings. As Nuria's movie ratings increase, some of Victoria's ratings also increase, suggesting they have somewhat similar tastes. However, not all movies follow this pattern: for example, a movie that Nuria rated as only a 2, Victoria rated as a 5.
+
+On the other hand, there is a negative correlation between Nerea and Maria's ratings. Movies that Nerea likes, Maria tends to dislike, and vice versa. Again, there are some discrepancies, but this general trend is followed.
+
+There is also a positive relationship between Chris and Jim. They both tend to rate movies similarly and positively (most fall at the higher end of the scale).
+
+
+# 3) Top Recommendations 
+Get the top 5 movies recommended for Victoria. by using a weighted average of every other critic's rankings.
+
+**Expected result**:
+'The Matrix'
+'Forrest Gump'     
+'The Sixth Sense' 
+'Shakespeare in Love'
+'Blade Runner'
+
+```{r fig.width=7, fig.height=6}
+#create an empty data frame to store weighted averages (Pearson correlations)
+weightedAvg <- data.frame()
+
+#loop through all critics, calculate correlation of each critic's ratings with Victoria, and append to WeightedAvg 
+for(i in 1:ncol(critics_T)) {
+    corr = cor(critics_T$Victoria, critics_T[,i], use='complete.obs')
+    weightedAvg = rbind(weightedAvg, data.frame(weights = corr))
+}
+
+#calculate absolute sum of weighted averages
+weightedSum = sum(abs(weightedAvg))
+
+#calculate Victoria's average rating
+victoriaAvg = mean(critics_T$Victoria, na.rm = T)
+
+#create an empty data frame to store critic averages
+criticAvgs <- data.frame()
+
+#calculate average rating for each critic
+for (c in 1:ncol(critics_T)) {
+    criticAvg = mean(critics_T[,c], na.rm = T)
+    criticAvgs = rbind(criticAvgs, data.frame(criticAvg = criticAvg))
+    #scaledRatings = cbind(scaledRatings, critnames[c])
+    }
+
+#scale all ratings using average critic ratings
+for(c in 1:ncol(critics_T)) {
+  for (r in 1:nrow(critics_T)) {
+    if(is.na(critics_T[r,c]) == FALSE) {
+      critics_T[r,c] = critics_T[r,c] - criticAvgs[c,]
+    }
+  }
+}
+
+#multiply scaled ratings by personalized user weight
+for(c in 1:ncol(critics_T)) {
+  for (r in 1:nrow(critics_T)) {
+    if(is.na(critics_T[r,c]) == FALSE) {
+      critics_T[r,c] = critics_T[r,c] * weightedAvg[c,]
+    }
+  }
+}
+
+#create a df that applies weighted average formula to calculate a score for each movie
+df <- data.frame(victoriaAvg + rowSums(critics_T, na.rm = T)/weightedSum)
+
+#set column names for df
+df2 = setNames(cbind(colnames(critics[2:21]), df, row.names = NULL), 
+  c("MovieName", "Score"))
+
+#select only Victoria's ratings
+vic = critics_T %>%
+  select(Victoria)
+
+#set column names for vic
+vic2 = setNames(cbind(colnames(critics[2:21]), vic, row.names = NULL), 
+  c("MovieName", "Victoria"))
+
+#filter for only movies Victoria has watched 
+vic2 = vic2 %>%
+  filter(!is.na(Victoria))
+
+#filter results for movies that Victoria has not watched and arrange descending based on score
+df2 %>%
+  filter(!MovieName %in% vic2$MovieName) %>%
+  arrange(desc(Score)) %>%
+  select(MovieName) %>%
+  head(5)
+```
+
+# 4) Top similar critics
+Return the top 5 critics that are most similar to Victoria. 
+
+**Expected result**:
+0.9449112, 'Rachel'
+0.5976143, 'Ana' 
+0.5789794, 'Oriol'
+0.4925922, 'Maria'
+0.4273247, 'Carles'
+
+```{r fig.width=7, fig.height=6}
+#add critic names to Pearson correlation scores
+weightedAvg2 = setNames(cbind(critics$User, weightedAvg, row.names = NULL), 
+  c("CriticName", "Pearson"))
+
+#remove Victoria, arrange descending by Pearson correlation, and select top 5
+weightedAvg2 %>% 
+  dplyr::filter(CriticName != "Victoria") %>%
+  arrange(desc(Pearson)) %>%
+  select(Pearson, CriticName) %>%
+  head(5)
+```
